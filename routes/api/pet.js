@@ -3,13 +3,23 @@ const debugError = require('debug')('app:error');
 const express = require('express');
 const { nanoid } = require('nanoid');
 const dbModule = require('../../database');
+const Joi = require('joi');
+const validId = require('../../middleware/validId');
+const validBody = require('../../middleware/validBody')
 
+const newPetSchema = Joi.object({
+  species: Joi.string().trim().min(1).pattern(/^[^0-9]+$/, 'not numbers').required(),
+  name: Joi.string().trim().min(1).required(),
+  age: Joi.number().integer().min(0).max(1000).required(),
+  gender: Joi.string().trim().length(1).required(),
+});
 
-const petsArray = [
-  { _id: '1', name: 'Fido', createdDate: new Date() },
-  { _id: '2', name: 'Watson', createdDate: new Date() },
-  { _id: '3', name: 'Loki', createdDate: new Date() },
-];
+const updatePetSchema = Joi.object({
+  species: Joi.string().trim().min(1).pattern(/^[^0-9]+$/, 'not numbers').required(),
+  name: Joi.string().trim().min(1).required(),
+  age: Joi.number().integer().min(0).max(1000).required(),
+  gender: Joi.string().trim().length(1).required(),
+});
 
 //create a router
 const router = express.Router();
@@ -24,65 +34,36 @@ router.get('/api/pet/list', async (req, res, next) => {
   }
 });
 
-router.get('/api/pet/:petId', async (req, res, next) => {
+router.get('/api/pet/:petId', validId('petId'), async (req, res, next) => {
   try {
-    const petId = dbModule.newId(req.params.petId);
+    const petId = req.petId
     const pet = await dbModule.findPetById(petId);
     if(!pet) {
       res.status(404).json({ error: `${petId} Id Not Found` })
     } else {
       res.json(pet)
-    }
+    } 
   } catch (err) {
     next(err);
   }
 });
 //create
-router.put('/api/pet/new', async (req, res, next) => {
+router.put('/api/pet/new', validBody(newPetSchema), async (req, res, next) => {
   try {
-    const pet = {
-      _id: dbModule.newId(),
-      species: req.body.species,
-      name: req.body.name,
-      age: parseInt(req.body.age),
-      gender: req.body.gender,
-      createdDate: new Date()
-    }
-    // const petId = newId();
-    // const { species, name, gender } = req.body;
-    // const age = parseInt(req.body.age);
-    
-    // const pet = {
-    //   _id: petId,
-    //   species, //species:species,
-    //   name,
-    //   age,
-    //   gender,
-    //   createdDate:new Date(),
-    // };
-  
-    //validation
-    if (!pet.species) {
-      res.status(400).json({ error: 'Species required' });
-    } else if (!pet.name) {
-      res.status(400).json({ error: 'Name required' });
-    } else if (!pet.gender) {
-      res.status(400).json({ error: 'Gender required' });
-    } else if (!pet.age) {
-      res.status(400).json({ error: 'Age required' });
-    } else {
-      await dbModule.insertOnePet(pet);
-      res.json({ message: 'Pet inserted.' })
-    }
+    const pet = req.body;
+    pet._id = dbModule.newId();
+
+    await dbModule.insertOnePet(pet);
+    res.json({ message: 'Pet inserted.' })
   } catch (err) {
     next(err)
   }
 
 });
 //update
-router.put('/api/pet/:petId', async (req, res, next) => {
+router.put('/api/pet/:petId', validId('petId'), validBody(updatePetSchema), async (req, res, next) => {
   try {
-    const petId = dbModule.newId(req.params.petId);
+    const petId = req.petId;
     const update = req.body;
     debug(`update pet ${petId}`, update);
 
