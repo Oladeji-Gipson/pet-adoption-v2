@@ -65,6 +65,34 @@ async function deleteOnePet(petId) {
   await db.collection('pets').deleteOne({_id: {$eq: petId}});
 }
 
+async function insertUser(user) {
+  const db = await connect();
+  return await db.collection('users').insertOne(user);
+}
+
+async function updateUser(userId, update) {
+  const db = await connect();
+  return await db.collection('users').updateOne(
+    {_id: {$eq: userId}},
+    {$set: {...update}}
+  );
+}
+
+async function getUserById(userId) {
+  const db = await connect();
+  return await db.collection('users').findOne({_id: {$eq: userId}});
+}
+
+async function getUserByEmail(email) {
+  const db = await connect();
+  return await db.collection('users').findOne({email: {$eq: email}});
+}
+
+async function saveEdit(edit) {
+  const db = await connect()
+  return await db.collection('edits').insertOne(edit);
+}
+
 ping();
 
 module.exports = {
@@ -76,4 +104,9 @@ module.exports = {
   insertOnePet,
   updateOnePet,
   deleteOnePet,
+  insertUser,
+  updateUser,
+  getUserById,
+  getUserByEmail,
+  saveEdit,
 };

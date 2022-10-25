@@ -15,10 +15,10 @@ const newPetSchema = Joi.object({
 });
 
 const updatePetSchema = Joi.object({
-  species: Joi.string().trim().min(1).pattern(/^[^0-9]+$/, 'not numbers').required(),
-  name: Joi.string().trim().min(1).required(),
-  age: Joi.number().integer().min(0).max(1000).required(),
-  gender: Joi.string().trim().length(1).required(),
+  species: Joi.string().trim().min(1).pattern(/^[^0-9]+$/, 'not numbers'),
+  name: Joi.string().trim().min(1),
+  age: Joi.number().integer().min(0).max(1000),
+  gender: Joi.string().trim().length(1),
 });
 
 //create a router
@@ -111,9 +111,28 @@ router.get('/api/pet/:petId', validId('petId'), async (req, res, next) => {
 router.put('/api/pet/new', validBody(newPetSchema), async (req, res, next) => {
   try {
     const pet = req.body;
+    if(!req.auth) {
+      return res.status(401).json({error: 'You must be logged in!'})
+    }
     pet._id = dbModule.newId();
+    pet.createdBy = {
+      _id: req.auth._id,
+      email: req.auth.email,
+      fullName: req.auth.fullName,
+      role: req.auth.role,
+    }
 
     await dbModule.insertOnePet(pet);
+
+    const edit = {
+      timestamp: new Date(),
+      op: 'create',
+      col: 'pets',
+      target: pet._id,
+      pet,
+      auth:req.auth
+    }
+    await dbModule.saveEdit(edit)
     res.json({ message: 'Pet inserted.' })
   } catch (err) {
     next(err)
@@ -126,12 +145,24 @@ router.put('/api/pet/:petId', validId('petId'), validBody(updatePetSchema), asyn
     const petId = req.petId;
     const update = req.body;
     debug(`update pet ${petId}`, update);
+    if(!req.auth) {
+      return res.status(401).json({error: 'You must be logged in!'})
+    };
 
     const pet = await dbModule.findPetById(petId);
     if (!pet) {
       res.status(404).json({error: `Pet ${petId} Not Found.`})
     } else {
       await dbModule.updateOnePet(petId, update);
+      const edit = {
+        timestamp: new Date(),
+        op: 'update',
+        col: 'pets',
+        target: {petId},
+        update,
+        auth:req.auth
+      }
+      await dbModule.saveEdit(edit)
       res.json({message: `Pet ${petId} Updated.`})
     }
   } catch (err) {
@@ -143,12 +174,25 @@ router.put('/api/pet/:petId', validId('petId'), validBody(updatePetSchema), asyn
 router.delete('/api/pet/:petId', async (req, res, next) => {
   try {
     const petId = dbModule.newId(req.params.petId);
-    const pet = dbModule.findPetById(petId)
+    const pet = await dbModule.findPetById(petId)
     debug(`delete pet ${petId}`);
+    if(!req.auth) {
+      return res.status(401).json({error: 'You must be logged in!'})
+    };
   
     if (!pet) {
       res.status(404).json({error: `Pet ${petId} Not Found.`})
     } else {
+      debug(pet)
+      const edit = {
+        timestamp: new Date(),
+        op: 'delete',
+        col: 'pets',
+        target: {petId},
+        pet,
+        auth:req.auth
+      }
+      await dbModule.saveEdit(edit)
       await dbModule.deleteOnePet(petId);
       res.json({message: `Pet ${petId} Deleted.`})
     }

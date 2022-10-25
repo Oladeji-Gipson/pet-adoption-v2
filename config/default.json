@@ -6,5 +6,11 @@
   "db": {
     "url": "mongodb+srv://Oladeji_Gipson:deji785490@cluster0.zfic0ui.mongodb.net/?retryWrites=true&w=majority",
     "name": "pet-adoption"
+  },
+  "auth": {
+    "secret": "",
+    "tokenExpiresIn": "24h",
+    "cookieMaxAge": 1200000,
+    "saltRounds": 10
   }
 }
