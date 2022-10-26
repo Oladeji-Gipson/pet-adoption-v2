@@ -97,6 +97,7 @@ router.post('/login', validBody(loginSchema), async (req, res, next) => {
 router.put('/me', validBody(updateSchema), async (req, res, next) => {
   //self-service update
   try {
+    debug(req.auth)
     if(!req.auth) {
       return res.status(401).json({error: 'You must be logged in!'})
     }
