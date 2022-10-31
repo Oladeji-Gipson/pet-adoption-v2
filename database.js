@@ -93,6 +93,12 @@ async function saveEdit(edit) {
   return await db.collection('edits').insertOne(edit);
 }
 
+async function findRoleByName(roleName) {
+  const db = await connect();
+  return await db.collection('roles').findOne({ name: { $eq: roleName } });
+}
+
+
 ping();
 
 module.exports = {
@@ -109,4 +115,5 @@ module.exports = {
   getUserById,
   getUserByEmail,
   saveEdit,
+  findRoleByName,
 };

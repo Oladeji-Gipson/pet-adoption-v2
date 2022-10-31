@@ -5,7 +5,8 @@ const { nanoid } = require('nanoid');
 const dbModule = require('../../database');
 const Joi = require('joi');
 const validId = require('../../middleware/validId');
-const validBody = require('../../middleware/validBody')
+const validBody = require('../../middleware/validBody');
+const {isLoggedIn, hasPermission} = require('@merlin4/express-auth');
 
 const newPetSchema = Joi.object({
   species: Joi.string().trim().min(1).pattern(/^[^0-9]+$/, 'not numbers').required(),
@@ -108,31 +109,31 @@ router.get('/api/pet/:petId', validId('petId'), async (req, res, next) => {
   }
 });
 //create
-router.put('/api/pet/new', validBody(newPetSchema), async (req, res, next) => {
+router.put('/api/pet/new', validBody(newPetSchema), hasPermission('canInsertPet'), async (req, res, next) => {
   try {
     const pet = req.body;
-    if(!req.auth) {
-      return res.status(401).json({error: 'You must be logged in!'})
-    }
+    // if(!req.auth) {
+    //   return res.status(401).json({error: 'You must be logged in!'})
+    // }
     pet._id = dbModule.newId();
-    pet.createdBy = {
-      _id: req.auth._id,
-      email: req.auth.email,
-      fullName: req.auth.fullName,
-      role: req.auth.role,
-    }
+    // pet.createdBy = {
+    //   _id: req.auth._id,
+    //   email: req.auth.email,
+    //   fullName: req.auth.fullName,
+    //   role: req.auth.role,
+    // }
 
     await dbModule.insertOnePet(pet);
 
-    const edit = {
-      timestamp: new Date(),
-      op: 'create',
-      col: 'pets',
-      target: pet._id,
-      pet,
-      auth:req.auth
-    }
-    await dbModule.saveEdit(edit)
+    // const edit = {
+    //   timestamp: new Date(),
+    //   op: 'create',
+    //   col: 'pets',
+    //   target: pet._id,
+    //   pet,
+    //   auth:req.auth
+    // }
+    // await dbModule.saveEdit(edit)
     res.json({ message: 'Pet inserted.' })
   } catch (err) {
     next(err)
@@ -171,14 +172,14 @@ router.put('/api/pet/:petId', validId('petId'), validBody(updatePetSchema), asyn
 });
 
 //delete
-router.delete('/api/pet/:petId', async (req, res, next) => {
+router.delete('/api/pet/:petId', isLoggedIn(), hasPermission('canDeletePet'), async (req, res, next) => {
   try {
     const petId = dbModule.newId(req.params.petId);
     const pet = await dbModule.findPetById(petId)
     debug(`delete pet ${petId}`);
-    if(!req.auth) {
-      return res.status(401).json({error: 'You must be logged in!'})
-    };
+    // if(!req.auth) {
+    //   return res.status(401).json({error: 'You must be logged in!'})
+    // };
   
     if (!pet) {
       res.status(404).json({error: `Pet ${petId} Not Found.`})

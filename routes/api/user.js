@@ -4,9 +4,55 @@ const Joi = require('joi');
 const bcrypt = require('bcrypt');
 const config = require('config');
 const jwt = require('jsonwebtoken');
-const { newId, insertUser, updateUser, getUserById, getUserByEmail, saveEdit } = require('../../database');
+const { newId, insertUser, updateUser, getUserById, getUserByEmail, saveEdit, findRoleByName } = require('../../database');
 const validBody = require('../../middleware/validBody');
 const validId = require('../../middleware/validId');
+
+async function issueAuthToken(user) {
+const authPayload = {
+  _id: user._id,
+  email: user.email,
+  fullName: user.fullName,
+  role: user.role,
+};
+
+// get role names
+const roleNames = Array.isArray(user.role) ? user.role : [user.role];
+
+// get all of the roles in parallel
+const roles = await Promise.all(
+  roleNames.map((roleName) => findRoleByName(roleName))
+);
+
+// combine the permission tables
+const permissions = {};
+for (const role of roles) {
+  if (role && role.permissions) {
+    for (const permission in role.permissions) {
+      if (role.permissions[permission] === true) {
+        permissions[permission] = true;
+      }
+    }
+  }
+}
+
+// update the token payload
+authPayload.permissions = permissions;
+
+// issue token
+const authSecret = config.get('auth.secret');
+const authOptions = { expiresIn: config.get('auth.tokenExpiresIn') };
+const authToken = jwt.sign(authPayload, authSecret, authOptions);
+return authToken;
+}
+
+function setAuthCookie(res, authToken) {
+const cookieOptions = {
+  httpOnly: true,
+  maxAge: parseInt(config.get('auth.cookieMaxAge')),
+};
+res.cookie('authToken', authToken, cookieOptions);
+}
 
 const registerSchema = Joi.object({
   email: Joi.string().trim().lowercase().email().required(),
@@ -38,22 +84,25 @@ router.post('/register', validBody(registerSchema), async (req,res,next) => {
       res.status(400).json({error: `Email ${user.email} is already in use.`})
     } else {
       const dbResult = await insertUser(user);
+
+      const authToken = await issueAuthToken(user);
+      setAuthCookie(res,authToken);
       debug(dbResult)
 
       //issue token
-      const authPayload = {
-        _id: user._id,
-        email: user.email,
-        fullName: user.fullName,
-        role: user.role,
-      }
-      const authSecret = config.get('auth.secret')
-      const authOptions = {expiresIn: config.get('auth.tokenExpiresIn')};
-      const authToken = jwt.sign(authPayload, authSecret, authOptions);
+      // const authPayload = {
+      //   _id: user._id,
+      //   email: user.email,
+      //   fullName: user.fullName,
+      //   role: user.role,
+      // }
+      // const authSecret = config.get('auth.secret')
+      // const authOptions = {expiresIn: config.get('auth.tokenExpiresIn')};
+      // const authToken = jwt.sign(authPayload, authSecret, authOptions);
 
       //create a cookie
-      const cookieOptions = {httpOnly: true, maxAge: parseInt(config.get('auth.cookieMaxAge'))}
-      res.cookie('authToken', authToken, cookieOptions)
+      // const cookieOptions = {httpOnly: true, maxAge: parseInt(config.get('auth.cookieMaxAge'))}
+      // res.cookie('authToken', authToken, cookieOptions)
 
       res.json({message: 'New User Registered!', userId: user._id, token: authToken});
     }
@@ -70,19 +119,22 @@ router.post('/login', validBody(loginSchema), async (req, res, next) => {
     debug(await bcrypt.compare(login.password, user.password))
     if (user && await bcrypt.compare(login.password, user.password)) {
 
-      const authPayload = {
-        _id: user._id,
-        email: user.email,
-        fullName: user.fullName,
-        role: user.role,
-      }
-      const authSecret = config.get('auth.secret')
-      const authOptions = {expiresIn: config.get('auth.tokenExpiresIn')};
-      const authToken = jwt.sign(authPayload, authSecret, authOptions);
+      const authToken = await issueAuthToken(user);
+      setAuthCookie(res,authToken);
+
+      // const authPayload = {
+      //   _id: user._id,
+      //   email: user.email,
+      //   fullName: user.fullName,
+      //   role: user.role,
+      // }
+      // const authSecret = config.get('auth.secret')
+      // const authOptions = {expiresIn: config.get('auth.tokenExpiresIn')};
+      // const authToken = jwt.sign(authPayload, authSecret, authOptions);
 
       //create a cookie
-      const cookieOptions = {httpOnly: true, maxAge: parseInt(config.get('auth.cookieMaxAge'))}
-      res.cookie('authToken', authToken, cookieOptions)
+      // const cookieOptions = {httpOnly: true, maxAge: parseInt(config.get('auth.cookieMaxAge'))}
+      // res.cookie('authToken', authToken, cookieOptions)
 
       res.json({message : 'Welcome back!', userId: user._id, token: authToken})
     } else {
@@ -132,7 +184,10 @@ router.put('/me', validBody(updateSchema), async (req, res, next) => {
     };
     await saveEdit(edit);
 
-    res.json({message: 'User Updated!'})
+    const authToken = await issueAuthToken({...req.auth, ...update});
+    setAuthCookie(res,authToken)
+
+    res.json({message: 'User Updated!', userId: userId, token: authToken})
   } catch (err) {
     next(err)
   }
@@ -171,8 +226,14 @@ router.put('/:userId', validBody(updateSchema), validId('userId'), async (req, r
     };
     await saveEdit(edit);
 
+    let authToken;
+    if(userId.equals(req.auth._id)) {
+      authToken = await issueAuthToken({...req.auth,...update});
+      setAuthCookie(res,authToken);
+    }
+
     if(dbResult.matchedCount > 0) {
-      res.json({message: 'User Updated', userId})
+      res.json({message: 'User Updated', userId: userId, token: authToken})
     }
     else {
       res.status(404).json({error: 'User Not Found!'});

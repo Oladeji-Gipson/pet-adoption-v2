@@ -4,6 +4,7 @@ const express = require('express');
 const { nanoid } = require('nanoid');
 const config = require('config');
 const dbModule = require('./database');
+const {authMiddleware} = require('@merlin4/express-auth')
 
 if(!config.get('db.url')) {
   throw new Error('db.url not defined!')
@@ -49,6 +50,12 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(require('cookie-parser')());
 app.use(require('./middleware/auth')());
+app.use(
+  authMiddleware('my super secret key', 'authToken', {
+    httpOnly: true,
+    maxAge: 1000 * 60 * 15,
+  })
+);
 
 //define routes
 app.use(require('./routes/api/pet'));
